@@ -98,11 +98,11 @@ public class Program
         Console.WriteLine("Converts .CHR files from Dragon Quest VIII (Playstation 2) to .glb/.glTF format.");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("    chrFormat.exe <input_file> <output_dir> [options]");
-        Console.WriteLine("    chrFormat.exe <input_dir> -b (batch mode: output files are saved in the <input_dir>)");
+        Console.WriteLine("    dq8chr2glb.exe <input_file> <output_dir> [options]");
+        Console.WriteLine("    dq8chr2glb.exe <input_dir> -b (batch mode: output files are saved in the <input_dir>)");
         Console.WriteLine("Examples:");
-        Console.WriteLine("    chrFormat.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\\ap002.chr\" \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -e");
-        Console.WriteLine("    chrFormat.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -b");
+        Console.WriteLine("    dq8chr2glb.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\\ap002.chr\" \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -e");
+        Console.WriteLine("    dq8chr2glb.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -b");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("   -e - Extract only - unpack .chr without conversion");
