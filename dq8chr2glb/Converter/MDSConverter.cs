@@ -121,8 +121,8 @@ public class MDSConverter
     {
         foreach (var clip in config.clips)
         {
-            var animation = _gltfModel.CreateAnimation(clip.name);
-
+            var rotationCurves = new List<(Node node, Dictionary<float, Quaternion> items)>();
+            var translationCurves = new List<(Node node, Dictionary<float, Vector3> items)>();
             foreach (var curve in motionCurves)
             {
                 if (_nodeMap.TryGetValue(curve.boneIndex, out var node))
@@ -153,12 +153,33 @@ public class MDSConverter
 
                     if (rotationKeyframes.Count > 0)
                     {
-                        animation.CreateRotationChannel(node, rotationKeyframes);
+                        rotationCurves.Add((node, rotationKeyframes));
                     }
 
                     if (translationKeyframes.Count > 0)
                     {
-                        animation.CreateTranslationChannel(node, translationKeyframes);
+                        translationCurves.Add((node, translationKeyframes));
+                    }
+                }
+            }
+
+            if (rotationCurves.Count > 0 || translationCurves.Count > 0)
+            {
+                var animation = _gltfModel.CreateAnimation(clip.name);
+                
+                foreach (var (node, items) in rotationCurves)
+                {
+                    if (items.Count > 0 && node != null)
+                    {
+                        animation.CreateRotationChannel(node, items);
+                    }
+                }
+
+                foreach (var (node, items) in translationCurves)
+                {
+                    if (items.Count > 0 && node != null)
+                    {
+                        animation.CreateTranslationChannel(node, items);
                     }
                 }
             }
