@@ -38,6 +38,13 @@ public class MDSConverter
         var gltfScene = _gltfModel.UseScene("DefaultScene");
 
         var nodesWithParents = new HashSet<int>();
+
+        if (scene.nodes == null || scene.nodes.Length == 0)
+        {
+            Log.Line($"There is nothing to convert in {name}", LogLevel.Info);
+            return;
+        }
+
         foreach (var node in scene.nodes)
         {
             if (node.parentIndex >= 0)
@@ -125,11 +132,12 @@ public class MDSConverter
 
                     for (var i = clip.startFrame; i < clip.endFrame; i++)
                     {
-                        var keyframe = curve.keyframes[i];
-                        if (keyframe == null)
+                        if (i >= curve.keyframes.Count || curve.keyframes[i] == null)
                         {
                             continue;
                         }
+
+                        var keyframe = curve.keyframes[i];
 
                         if (curve.curveType == KeyframeType.Quaternion)
                         {
@@ -161,6 +169,11 @@ public class MDSConverter
     {
         foreach (var tex in textures)
         {
+            if (tex == null)
+            {
+                continue;
+            }
+
             byte[] imageBytes;
             using (var ms = new MemoryStream())
             {
@@ -240,20 +253,36 @@ public class MDSConverter
             }
         }
 
-        skin.BindJoints(jointBindings);
+        try
+        {
+            skin.BindJoints(jointBindings);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e);
+            return;
+        }
 
         foreach (var node in _gltfModel.LogicalNodes)
         {
             if (node.Mesh != null)
             {
-                if (node.Mesh.Primitives.Any(i => i.VertexAccessors.ContainsKey("WEIGHTS_0")))
+                var hasWeights = node.Mesh.Primitives.All(i => i.VertexAccessors.ContainsKey("WEIGHTS_0"));
+                if (hasWeights)
                 {
                     if (Quaternion.Dot(node.LocalTransform.GetDecomposed().Rotation, Quaternion.Identity) >= 0.999f)
                     {
                         node.LocalTransform = Matrix4x4.Identity;
                     }
 
-                    node.Skin = skin;
+                    try
+                    {
+                        node.Skin = skin;
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Line(e.TargetSite.Name);
+                    }
                 }
             }
         }
@@ -273,13 +302,20 @@ public class MDSConverter
     {
         var path = Path.Combine(filePath, _name + (textFormat ? ".gltf" : ".glb"));
 
-        if (textFormat)
+        try
         {
-            _gltfModel.SaveGLTF(path);
+            if (textFormat)
+            {
+                _gltfModel.SaveGLTF(path);
+            }
+            else
+            {
+                _gltfModel.SaveGLB(path);
+            }
         }
-        else
+        catch (Exception e)
         {
-            _gltfModel.SaveGLB(path);
+            Log.Error(e);
         }
     }
 }

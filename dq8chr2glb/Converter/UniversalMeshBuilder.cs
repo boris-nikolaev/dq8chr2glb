@@ -20,7 +20,6 @@ namespace dq8chr2glb.Converter
             var hasUvs = (mdsMesh.features & MeshFeatures.UVs) != 0;
             var hasSkinning = (mdsMesh.features & MeshFeatures.Weights) != 0;
 
-            // Выбираем подходящий тип вершины на основе атрибутов
             if (hasSkinning)
             {
                 if (hasUvs)
@@ -52,9 +51,9 @@ namespace dq8chr2glb.Converter
         private static (bool hasUvs, bool hasSkinning) AnalyzeMeshAttributes(MDSMesh mdsMesh)
         {
             var hasUvs = mdsMesh.uv != null && mdsMesh.uv.Length > 0 &&
-                          Array.Exists(mdsMesh.uv, uv => uv != null && uv.Length >= 2);
+                         Array.Exists(mdsMesh.uv, uv => uv != null && uv.Length >= 2);
             var hasSkinning = mdsMesh.weights != null && mdsMesh.bones != null &&
-                               mdsMesh.bones.Length > 0; //  && Array.Exists(mdsMesh.bones, b => b != null)
+                              mdsMesh.bones.Length > 0;
 
             return (hasUvs, hasSkinning);
         }
@@ -102,6 +101,8 @@ namespace dq8chr2glb.Converter
                     var boneWeights = mdsMesh.weights[i];
 
                     var bindings = new (int JointIndex, float Weight)[Math.Min(4, boneIndices.Length)];
+
+                    var wSum = 0f;
                     for (var b = 0; b < bindings.Length; b++)
                     {
                         var mdsBoneIndex = boneIndices[b];
@@ -109,12 +110,23 @@ namespace dq8chr2glb.Converter
                         {
                             var gltfBoneIndex = nodesMap[mdsBoneIndex];
                             bindings[b] = (Math.Max(gltfBoneIndex, 0), boneWeights[b]);
+                            wSum += boneWeights[b];
                         }
                         else
                         {
-                            // Обработка случая, когда MDS-индекс не найден в маппинге
-                            bindings[b] = (0, boneWeights[b]); // или другое значение по умолчанию
+                            bindings[b] = (0, boneWeights[b]);
                         }
+                    }
+
+                    if (wSum < 0.00001f)
+                    {
+                        skinningData.Add(Array.Empty<(int, float)>());
+                        continue;
+                    }
+
+                    for (var index = 0; index < bindings.Length; index++)
+                    {
+                        bindings[index].Weight /= wSum;
                     }
 
                     skinningData.Add(bindings);
@@ -185,7 +197,16 @@ namespace dq8chr2glb.Converter
                 }
             }
 
-            return root.CreateMesh(meshBuilder);
+            try
+            {
+                return root.CreateMesh(meshBuilder);
+            }
+            catch (Exception e)
+            {
+                Log.Line($"Create Mesh Error: {mdsMesh.name}", LogLevel.Error);
+                Log.Error(e);
+                return null;
+            }
         }
 
         private static VertexBuilder<TvG, TvM, TvS> CreateVertex<TvG, TvM, TvS>(

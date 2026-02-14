@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using dq8chr2glb.Logger;
 
 namespace dq8chr2glb.Core.MOTFormat;
 
@@ -93,7 +94,15 @@ public class Importer
                 keyframe.type = KeyframeType.Quaternion;
                 keyframe.rotation = ReadQuaternion(data, valuesOffset, scale);
 
-                curve.keyframes[frame] = keyframe;
+                try
+                {
+                    curve.keyframes[frame] = keyframe;
+                }
+                catch (Exception e)
+                {
+                    Log.Line($"Skip negative frame number: {frame}", LogLevel.Warning);
+                }
+
                 valuesOffset += 8;
             }
         }
@@ -144,6 +153,11 @@ public class Importer
             var toValues = header.valuesOffset;
             foreach (var frame in frames)
             {
+                if (frame == null || frame < 0)
+                {
+                    continue;
+                }
+
                 var scale = new Vector3(header.scaleX, header.scaleY,
                                         header.scaleZ);
 

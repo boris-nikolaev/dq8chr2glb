@@ -17,7 +17,7 @@ public class Reader
 
         if (header.version != 200)
         {
-            Console.WriteLine($"Unknown version: {header.version}");
+            Log.Line($"Unknown version: {header.version}.");
             return null;
         }
 

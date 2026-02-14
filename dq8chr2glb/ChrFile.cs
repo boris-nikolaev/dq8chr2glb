@@ -7,6 +7,7 @@ using dq8chr2glb.Converter;
 using dq8chr2glb.Core.InfoCfg;
 using dq8chr2glb.Core.MDSFormat;
 using dq8chr2glb.Core.MOTFormat;
+using dq8chr2glb.Logger;
 using SixLabors.ImageSharp;
 using Texture = dq8chr2glb.TM2Format.Texture;
 
@@ -80,7 +81,7 @@ public class ChrFile
         }
 
         var spacer = new string('.', spaces);
-        Console.WriteLine($"  Process: {file.name + spacer} {file.data.Length} bytes");
+        Log.Line($"  Process: {file.name + spacer} {file.data.Length} bytes");
     }
 
     public void Clean()
@@ -118,7 +119,16 @@ public class ChrFile
 
     private void ProcessMDSFile(IncludedFile file, string outputDir)
     {
+        if (extract)
+        {
+            ProcessRawFile(file, outputDir);
+        }
+
         var mdsScene = Reader.Read(file.data, file.name);
+        if (mdsScene == null)
+        {
+            return;
+        }
 
         if (convert)
         {
@@ -126,11 +136,6 @@ public class ChrFile
             var rootName = Path.GetFileNameWithoutExtension(file.name);
             converter.Convert(mdsScene, textures, rootName);
             mdsConverters.Add(converter);
-        }
-
-        if (extract)
-        {
-            ProcessRawFile(file, outputDir);
         }
     }
 

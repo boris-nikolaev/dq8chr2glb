@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using dq8chr2glb.Logger;
 
 namespace dq8chr2glb;
 
@@ -64,7 +65,7 @@ public class Program
             var files = Directory.GetFiles(inputPath, "*.chr", SearchOption.TopDirectoryOnly);
             foreach (var file in files)
             {
-                Console.WriteLine($"Processing: {Path.GetFileName(file)}");
+                Log.Line($"Processing: {Path.GetFileName(file)}", LogLevel.Info);
                 try
                 {
                     chrFile.Process(file, outputPath);
@@ -78,18 +79,18 @@ public class Program
                 chrFile.Clean();
             }
 
-            Console.WriteLine(files.Length == 0 ? "No .chr files found in the input directory." : "Done!");
+            Log.Line(files.Length == 0 ? "No .chr files found in the input directory." : "Done!", LogLevel.Info);
         }
         else
         {
             if (!File.Exists(inputPath))
             {
-                Console.WriteLine($"Error: Input file not found: {inputPath}");
+                Log.Line($"Input file not found: {inputPath}", LogLevel.Error);
                 return;
             }
 
             chrFile.Process(inputPath, outputPath);
-            Console.WriteLine("Done!");
+            Log.Line("Done!", LogLevel.Info);
         }
     }
 
