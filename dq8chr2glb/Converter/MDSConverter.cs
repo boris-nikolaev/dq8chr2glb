@@ -6,6 +6,7 @@ using System.Numerics;
 using dq8chr2glb.Core.InfoCfg;
 using dq8chr2glb.Core.MDSFormat;
 using dq8chr2glb.Core.MOTFormat;
+using dq8chr2glb.Logger;
 using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Schema2;
@@ -22,7 +23,7 @@ public class MDSConverter
     private readonly Dictionary<int, Node> _nodeMap = new();
     private readonly List<Node> _boneNodes = new();
     private readonly Dictionary<string, MaterialBuilder> _materialCache = new();
-    private Dictionary<string, ImageBuilder> _textureBuilders = new Dictionary<string, ImageBuilder>();
+    private Dictionary<string, ImageBuilder> _textureBuilders = new();
 
     private const float FRAMERATE = 16f;
 
@@ -32,7 +33,7 @@ public class MDSConverter
         _gltfModel = ModelRoot.CreateModel();
     }
 
-    public void Convert(MDSScene scene, List<TM2Format.Texture> images, string name)
+    public void Convert(MDSScene scene, List<Texture> images, string name)
     {
         var gltfScene = _gltfModel.UseScene("DefaultScene");
 
@@ -78,6 +79,17 @@ public class MDSConverter
             }
         }
 
+        var nodesMapping = new Dictionary<int, int>();
+        for (int i = 0; i < _boneNodes.Count; i++)
+        {
+            var boneNode = _boneNodes[i];
+            var mdsNode = Array.Find(scene.nodes, n => n.name == boneNode.Name);
+            if (mdsNode != null)
+            {
+                nodesMapping[mdsNode.index] = i;
+            }
+        }
+
         CreateMaterials(scene.materials, images);
 
         var meshes = scene.nodes.Where(n => n is MDSMesh).Cast<MDSMesh>().ToArray();
@@ -85,7 +97,7 @@ public class MDSConverter
         {
             if (mdsMesh?.vertices == null || mdsMesh.triangles == null) continue;
 
-            var mesh = CreateGltfMesh(mdsMesh, scene.materials);
+            var mesh = CreateGltfMesh(mdsMesh, scene.materials, nodesMapping);
             if (_nodeMap.TryGetValue(mdsMesh.index, out var meshNode))
             {
                 meshNode.WithMesh(mesh);
@@ -178,9 +190,9 @@ public class MDSConverter
         }
     }
 
-    private Mesh CreateGltfMesh(MDSMesh mdsMesh, MDSMaterial[] materials)
+    private Mesh CreateGltfMesh(MDSMesh mdsMesh, MDSMaterial[] materials, Dictionary<int, int> nodesMapping)
     {
-        return UniversalMeshBuilder.CreateMesh(_gltfModel, mdsMesh, materials, _materialCache);
+        return UniversalMeshBuilder.CreateMesh(_gltfModel, mdsMesh, materials, _materialCache, nodesMapping);
     }
 
     private void SetupSkeleton(MDSNode[] nodes, string name)
@@ -196,14 +208,9 @@ public class MDSConverter
             }
         }
 
-        if (rootBone == null && _boneNodes.Count > 0)
-        {
-            rootBone = _boneNodes[0];
-        }
-
         if (_boneNodes.Count == 0)
         {
-            Console.WriteLine("Skip mesh with 0 bones");
+            Log.Line("Skip mesh with 0 bones");
             return;
         }
 
@@ -222,8 +229,7 @@ public class MDSConverter
                 var bindposeMatrix = ToNumericsMatrix4x4(b.bindpose);
                 if (Matrix4x4.Invert(bindposeMatrix, out var bindposeInverse))
                 {
-                    var multiplied = Matrix4x4.Multiply(bindposeInverse, Matrix4x4.Identity);
-                    bindMatrix = SanitizeBindMatrix(multiplied);
+                    bindMatrix = Matrix4x4.Multiply(bindposeInverse, Matrix4x4.Identity);
                 }
                 else
                 {
@@ -240,7 +246,7 @@ public class MDSConverter
         {
             if (node.Mesh != null)
             {
-                if (node.Mesh.Primitives.All(i => i.VertexAccessors.ContainsKey("WEIGHTS_0")))
+                if (node.Mesh.Primitives.Any(i => i.VertexAccessors.ContainsKey("WEIGHTS_0")))
                 {
                     if (Quaternion.Dot(node.LocalTransform.GetDecomposed().Rotation, Quaternion.Identity) >= 0.999f)
                     {
@@ -251,11 +257,6 @@ public class MDSConverter
                 }
             }
         }
-    }
-
-    private Matrix4x4 SanitizeBindMatrix(Matrix4x4 matrix)
-    {
-        return matrix;
     }
 
     private Matrix4x4 ToNumericsMatrix4x4(MDSMatrix m)

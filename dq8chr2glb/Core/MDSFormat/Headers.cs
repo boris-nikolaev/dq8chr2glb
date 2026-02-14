@@ -31,10 +31,10 @@ public struct MDTHeader
     [FieldOffset(20)] public int value2; // always 4104?
     [FieldOffset(24)] public int value3; // always 4112?
 
-    [FieldOffset(32)] public float scaleFactorX;
-    [FieldOffset(36)] public float scaleFactorY;
+    [FieldOffset(32)] public float scaleX;
+    [FieldOffset(36)] public float scaleY;
 
-    [FieldOffset(40)] public float scaleFactorZ;
+    [FieldOffset(40)] public float scaleZ;
 
     // [FieldOffset(64)] public Float3 someScale; // always 1.079?
     [FieldOffset(80)] public float uvScaleX;
@@ -61,7 +61,7 @@ public struct MDTHeader
     [FieldOffset(192)] public AABB bounds;
 }
 
-[StructLayout(LayoutKind.Explicit, Size = 40)]
+[StructLayout(LayoutKind.Explicit, Size = 48)]
 public struct AABB
 {
     [FieldOffset(00)] public float minX;

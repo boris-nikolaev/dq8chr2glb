@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using dq8chr2glb.Logger;
 
 namespace dq8chr2glb.Core.MDSFormat;
 
 public class Reader
 {
+    private const float gScale = 0.00003f; // Global Scale Constant
+
     public static MDSScene Read(byte[] data, string filename)
     {
         var offset = 0;
@@ -43,26 +46,17 @@ public class Reader
             mesh.features = features;
             mesh.bounds = mdtHeader.bounds;
 
-            // Console.WriteLine($"Features {features}");
-
-            var gScale = 0.00003f;
             var scale = new float[3]
-            {
-                mdtHeader.scaleFactorX * gScale, mdtHeader.scaleFactorY * gScale, mdtHeader.scaleFactorZ * gScale
-            };
+                { mdtHeader.scaleX * gScale, mdtHeader.scaleY * gScale, mdtHeader.scaleZ * gScale };
             var uvScale = new float[2] { mdtHeader.uvScaleX, mdtHeader.uvScaleY };
 
             // read vertices array
             var vOffset = offset + mdtHeader.toVertexCount + mdtHeader.bytesToFirstVertex;
             var vCount = mdtHeader.vertsCount;
             var vertices = Utils.ReadArray<short[], float[]>(data, vOffset, vCount, 3,
-                                                             s =>
+                                                             s => new[]
                                                              {
-                                                                 return new[]
-                                                                 {
-                                                                     s[0] * scale[0], s[1] * scale[1],
-                                                                     s[2] * scale[2]
-                                                                 };
+                                                                 s[0] * scale[0], s[1] * scale[1], s[2] * scale[2]
                                                              });
 
             // read colors array
@@ -71,51 +65,33 @@ public class Reader
             {
                 var cOffset = offset + mdtHeader.toVertexCount + mdtHeader.bytesToFirstColor;
                 var cCount = mdtHeader.colorsCount;
+                var maxByte = (float)byte.MaxValue;
                 colors = Utils.ReadArray<byte[], float[]>(data, cOffset, cCount, 3,
-                                                          s =>
+                                                          s => new[]
                                                           {
-                                                              return new[]
-                                                                  { s[0] / 256f, s[1] / 256f, s[2] / 256f };
+                                                              s[0] / maxByte, s[1] / maxByte, s[2] / maxByte
                                                           });
             }
 
             // read texcoords array
             var tOffset = offset + mdtHeader.toVertexCount + mdtHeader.uvOffset;
             var tCount = mdtHeader.uvCount;
+            var maxSByte = (float)sbyte.MaxValue;
             var uvs = Utils.ReadArray<byte[], float[]>(data, tOffset, tCount, 2,
-                                                       s =>
+                                                       s => new[]
                                                        {
-                                                           return new[]
-                                                           {
-                                                               s[0] / 127f * uvScale[0], s[1] / 127f * uvScale[1]
-                                                           };
+                                                           s[0] / maxSByte * uvScale[0], s[1] / maxSByte * uvScale[1]
                                                        });
 
             // read weights array
             var wOffset = offset + mdtHeader.toVertexCount + mdtHeader.toWeightsOffset;
-            var weights = Utils.ReadArray<ushort[], float[]>(data, wOffset, vCount, 4, s =>
-            {
-                var output = new float[4];
-                for (var i = 0; i < 4; i++)
-                {
-                    output[i] = s[i] / 32768f;
-                }
-
-                return output;
-            });
+            var weights = Utils.ReadArray<ushort[], float[]>(data, wOffset, vCount, 4,
+                                                             s => Array.ConvertAll(s, x => (float)x / short.MaxValue));
 
             // read bones per vertex array
             var bOffset = offset + mdtHeader.toVertexCount + mdtHeader.toBoneIndicesOffset;
-            var boneIndices = Utils.ReadArray<short[], int[]>(data, bOffset, vCount, 4, s =>
-            {
-                var output = new int[4];
-                for (var i = 0; i < 4; i++)
-                {
-                    output[i] = s[i];
-                }
-
-                return output;
-            });
+            var boneIndices = Utils.ReadArray<short[], int[]>(data, bOffset, vCount, 4,
+                                                              s => Array.ConvertAll(s, x => (int)x));
 
             var submeshes = new List<SubMesh>();
             var triangleGroupOffset = offset + mdtHeader.vertexAttrSize;
@@ -131,8 +107,16 @@ public class Reader
             for (var submeshIndex = 0; submeshIndex < mdtHeader.triangleGroupCount; submeshIndex++)
             {
                 var triangleGroupHeader = Utils.ReadStruct<TriangleGroupHeader>(data, ref triangleGroupOffset);
-                if (triangleGroupHeader.headerSize == 32)
+                if (triangleGroupHeader.headerSize == 32 && triangleGroupHeader.toNext == 0)
                 {
+                    // This is normal. Often, such blocks complete a sequence.
+                    continue;
+                }
+
+                if (triangleGroupHeader.headerSize == 32 && triangleGroupHeader.toNext != 0)
+                {
+                    // This might be weird.
+                    Log.Line($"Skip 32-bit triangle group header on {triangleGroupOffset}");
                     continue;
                 }
 
@@ -221,7 +205,6 @@ public class Reader
             if (type == NodeType.Bone)
             {
                 var boneNode = new MDSBone();
-                mdsNode = new MDSNode();
                 mdsNode = boneNode;
             }
             else
@@ -317,8 +300,7 @@ public class Reader
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Bad index [{triangleVertexIndex}] in {content} array. Array start index: {address}, elements: {attribute.Length}");
-                break;
+                Log.Line($"Bad index [{triangleVertexIndex}] in {content} array. Array start index: {address}, elements: {attribute.Length}");
             }
         }
 

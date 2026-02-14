@@ -1,20 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using dq8chr2glb.Core.MDSFormat;
+using dq8chr2glb.Logger;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
+using Node = SharpGLTF.Schema2.Node;
 
 namespace dq8chr2glb.Converter
 {
     public static class UniversalMeshBuilder
     {
         public static Mesh CreateMesh(ModelRoot _root, MDSMesh mdsMesh, MDSMaterial[] materials,
-                                      Dictionary<string, MaterialBuilder> materialCache)
+                                      Dictionary<string, MaterialBuilder> materialCache, Dictionary<int, int> nodesMap)
         {
-            var (hasUvs, hasSkinning) = AnalyzeMeshAttributes(mdsMesh);
+            var hasUvs = (mdsMesh.features & MeshFeatures.UVs) != 0;
+            var hasSkinning = (mdsMesh.features & MeshFeatures.Weights) != 0;
 
             // Выбираем подходящий тип вершины на основе атрибутов
             if (hasSkinning)
@@ -22,12 +26,12 @@ namespace dq8chr2glb.Converter
                 if (hasUvs)
                 {
                     return CreateMeshWithAllAttributes<VertexPositionNormal, VertexTexture1, VertexJoints4>(
-                     _root, mdsMesh, materials, materialCache);
+                     _root, mdsMesh, materials, materialCache, nodesMap);
                 }
                 else
                 {
                     return CreateMeshWithAllAttributes<VertexPositionNormal, VertexEmpty, VertexJoints4>(
-                     _root, mdsMesh, materials, materialCache);
+                     _root, mdsMesh, materials, materialCache, nodesMap);
                 }
             }
             else
@@ -35,12 +39,12 @@ namespace dq8chr2glb.Converter
                 if (hasUvs)
                 {
                     return CreateMeshWithAllAttributes<VertexPositionNormal, VertexTexture1, VertexEmpty>(
-                     _root, mdsMesh, materials, materialCache);
+                     _root, mdsMesh, materials, materialCache, nodesMap);
                 }
                 else
                 {
                     return CreateMeshWithAllAttributes<VertexPositionNormal, VertexEmpty, VertexEmpty>(
-                     _root, mdsMesh, materials, materialCache);
+                     _root, mdsMesh, materials, materialCache, nodesMap);
                 }
             }
         }
@@ -50,8 +54,7 @@ namespace dq8chr2glb.Converter
             var hasUvs = mdsMesh.uv != null && mdsMesh.uv.Length > 0 &&
                           Array.Exists(mdsMesh.uv, uv => uv != null && uv.Length >= 2);
             var hasSkinning = mdsMesh.weights != null && mdsMesh.bones != null &&
-                               mdsMesh.bones.Length > 0 &&
-                               Array.Exists(mdsMesh.bones, b => b != null);
+                               mdsMesh.bones.Length > 0; //  && Array.Exists(mdsMesh.bones, b => b != null)
 
             return (hasUvs, hasSkinning);
         }
@@ -60,7 +63,8 @@ namespace dq8chr2glb.Converter
             ModelRoot root,
             MDSMesh mdsMesh,
             MDSMaterial[] materials,
-            Dictionary<string, MaterialBuilder> materialCache)
+            Dictionary<string, MaterialBuilder> materialCache,
+            Dictionary<int, int> nodesMap)
             where TvG : struct, IVertexGeometry
             where TvM : struct, IVertexMaterial
             where TvS : struct, IVertexSkinning
@@ -71,10 +75,10 @@ namespace dq8chr2glb.Converter
             var normals = new List<Vector3>();
             var texCoords = new List<Vector2>();
             var skinningData = new List<(int, float)[]>();
-            var hasUvs = mdsMesh.uv != null && mdsMesh.uv.Length > 0;
-            var hasSkinning = mdsMesh.weights != null && mdsMesh.bones != null;
+            var hasUvs = (mdsMesh.features & MeshFeatures.UVs) != 0;
+            var hasSkinning = (mdsMesh.features & MeshFeatures.Weights) != 0;
 
-            for (int i = 0; i < mdsMesh.vertices.Length; i++)
+            for (var i = 0; i < mdsMesh.vertices.Length; i++)
             {
                 positions.Add(new Vector3(
                                           mdsMesh.vertices[i][0],
@@ -92,15 +96,25 @@ namespace dq8chr2glb.Converter
                     texCoords.Add(Vector2.Zero);
                 }
 
-                if (hasSkinning && i < mdsMesh.bones.Length && mdsMesh.bones[i] != null)
+                if (hasSkinning && i < mdsMesh.bones.Length)
                 {
                     var boneIndices = mdsMesh.bones[i];
                     var boneWeights = mdsMesh.weights[i];
 
-                    var bindings = new (int JointIndex, float Weight)[Math.Min(8, boneIndices.Length)];
+                    var bindings = new (int JointIndex, float Weight)[Math.Min(4, boneIndices.Length)];
                     for (var b = 0; b < bindings.Length; b++)
                     {
-                        bindings[b] = (boneIndices[b], boneWeights[b]);
+                        var mdsBoneIndex = boneIndices[b];
+                        if (nodesMap.ContainsKey(mdsBoneIndex))
+                        {
+                            var gltfBoneIndex = nodesMap[mdsBoneIndex];
+                            bindings[b] = (Math.Max(gltfBoneIndex, 0), boneWeights[b]);
+                        }
+                        else
+                        {
+                            // Обработка случая, когда MDS-индекс не найден в маппинге
+                            bindings[b] = (0, boneWeights[b]); // или другое значение по умолчанию
+                        }
                     }
 
                     skinningData.Add(bindings);
@@ -134,6 +148,15 @@ namespace dq8chr2glb.Converter
                     indices.Add(mdsMesh.triangles[i + 2]);
                 }
 
+                var maxBoneIndex = 0;
+                foreach (var bones in mdsMesh.bones)
+                {
+                    foreach (var boneID in bones)
+                    {
+                        maxBoneIndex = Math.Max(boneID, maxBoneIndex);
+                    }
+                }
+
                 for (var i = 0; i < indices.Count; i += 3)
                 {
                     var idxA = indices[i];
@@ -144,19 +167,19 @@ namespace dq8chr2glb.Converter
                                                               positions[idxA],
                                                               normals[idxA],
                                                               texCoords.Count > idxA ? texCoords[idxA] : Vector2.Zero,
-                                                              skinningData.Count > idxA ? skinningData[idxA] : null);
+                                                              skinningData.Count != 0 ? skinningData[idxA] : null);
 
                     var vertexB = CreateVertex<TvG, TvM, TvS>(
                                                               positions[idxB],
                                                               normals[idxB],
                                                               texCoords.Count > idxB ? texCoords[idxB] : Vector2.Zero,
-                                                              skinningData.Count > idxB ? skinningData[idxB] : null);
+                                                              skinningData.Count != 0 ? skinningData[idxB] : null);
 
                     var vertexC = CreateVertex<TvG, TvM, TvS>(
                                                               positions[idxC],
                                                               normals[idxC],
                                                               texCoords.Count > idxC ? texCoords[idxC] : Vector2.Zero,
-                                                              skinningData.Count > idxC ? skinningData[idxC] : null);
+                                                              skinningData.Count != 0 ? skinningData[idxC] : null);
 
                     primitive.AddTriangle(vertexA, vertexB, vertexC);
                 }
@@ -185,8 +208,9 @@ namespace dq8chr2glb.Converter
                 {
                     material.SetTexCoord(0, texCoord);
                 }
-                catch
+                catch (Exception e)
                 {
+                    Log.Error(e);
                 }
             }
 
@@ -197,8 +221,9 @@ namespace dq8chr2glb.Converter
                 {
                     skinning.SetBindings(skinningData);
                 }
-                catch
+                catch (Exception e)
                 {
+                    Log.Error(e);
                 }
             }
 
