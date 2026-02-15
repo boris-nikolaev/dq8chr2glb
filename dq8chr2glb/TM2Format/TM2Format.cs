@@ -1,4 +1,6 @@
 using System;
+using dq8chr2glb.Container;
+using dq8chr2glb.Converter;
 using dq8chr2glb.Logger;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -8,8 +10,12 @@ namespace dq8chr2glb.TM2Format;
 // Взято из https://github.com/Souzooka/TM2Unswizzler
 public static class TM2Format
 {
-    public static Texture GetImage(byte[] data, string name)
+    public static IncludedFile currentFile;
+    
+    public static Texture GetImage(IncludedFile file, string name)
     {
+        currentFile = file;
+        var data = file.data;
         var header = TM2Header.GetHeader(data);
         var image = GetImageBuffer(header, data);
 
@@ -67,7 +73,7 @@ public static class TM2Format
         }
         catch (Exception e)
         {
-            Log.Error(e);
+            Context.current.errors.Add(new Error(currentFile.name, "Error then import texture", e));
             palette = null;
         }
 

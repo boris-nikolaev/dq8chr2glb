@@ -116,7 +116,7 @@ public class Reader
                 if (triangleGroupHeader.headerSize == 32 && triangleGroupHeader.toNext != 0)
                 {
                     // This might be weird.
-                    Log.Line($"Skip 32-bit triangle group header on {triangleGroupOffset}");
+                    // Log.Line($"Skip 32-bit triangle group header on {triangleGroupOffset}");
                     continue;
                 }
 
