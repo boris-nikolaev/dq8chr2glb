@@ -19,25 +19,27 @@ A command-line tool for converting .CHR character model files from Dragon Quest 
 
 | Option | Description |
 |--------|-------------|
-| `-e`   | Extract only - unpack `.chr` without conversion |
-| `-t`   | Output as `.glTF` (text) instead of `.glb` (binary) |
-| `-b`   | Batch mode - process all `.chr` files in directory |
+| `-i`, `--input`   | Input path |
+| `-o`, `--output`   | Output path |
+| `-e`, `--extract`   | Extract only - unpack `.chr` without conversion |
+| `-f`, `--format`   | Output format. `GLTF` for text format or `GLB` for binary (default: `GLB`) |
+| `-b`, `--batch`   | Batch mode - process all `.chr` files in directory |
+| `-h`, `--help`   | Show help |
 
 ## Usage
 
 ### Basic Syntax
 
 ```
-dq8chr2glb.exe <input_file> <output_dir> [options]
-dq8chr2glb.exe <input_dir> -b  # Batch mode
-dq8chr2glb.exe # No args for get help
+dq8chr2glb.exe -i <input_file> -o <output_dir> [options]
+dq8chr2glb.exe -i <input_dir> -b  # Batch mode
 ```
 
 ### Examples
 
 ```
-dq8chr2glb.exe "C:\Games\DQ8\@DATA.DAT\chara\ap002.chr" "C:\Exports"
-dq8chr2glb.exe "C:\Games\DQ8\@DATA.DAT\chara" -b
-dq8chr2glb.exe "C:\Games\DQ8\@DATA.DAT\chara\ap002.chr" "C:\Exports" -e
-dq8chr2glb.exe "C:\Games\DQ8\@DATA.DAT\chara" -b -e
+dq8chr2glb.exe -i "C:\Games\DQ8\@DATA.DAT\chara\ap002.chr" -o "C:\Exports"
+dq8chr2glb.exe -i "C:\Games\DQ8\@DATA.DAT\chara" -b
+dq8chr2glb.exe -i "C:\Games\DQ8\@DATA.DAT\chara\ap002.chr" -o "C:\Exports" -e
+dq8chr2glb.exe -i "C:\Games\DQ8\@DATA.DAT\chara" -b -t GLTF
 ```

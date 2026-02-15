@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.CommandLine;
 using System.IO;
+using dq8chr2glb.Converter;
 using dq8chr2glb.Logger;
 
 namespace dq8chr2glb;
@@ -9,56 +11,40 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        if (args.Length < 2)
+        var rootCommand = new RootCommand("Converts .CHR files from Dragon Quest VIII (Playstation 2) to .glb/.glTF format.")
         {
-            ShowHelp();
-            return;
-        }
+            new Option<string>("-i", "--input") { Description = "Input path", HelpName = "input path"},
+            new Option<string>("-o", "--output") { Description = "Output path", HelpName = "output path"},
+            new Option<OutputFormat>("-f", "--format") {Description = "Output format", DefaultValueFactory = _ => OutputFormat.GLB},
+            new Option<bool>("-e", "--extract") {Description = "Extract only - unpack .chr without conversion"},
+            new Option<bool>("-b", "--batch") {Description = "Batch mode - process all .chr files in the input directory"},
+            new Option<LogMode>("-l", "--log") { Description = "Log level", DefaultValueFactory = _ => LogMode.MINIMAL },
+        };
 
-        var extractOnly = false;
-        var textFormat = false;
-        var batchMode = false;
+        var parser = rootCommand.Parse(args);
 
-        var processedArgs = new List<string>();
-        for (int i = 0; i < args.Length; i++)
-        {
-            var arg = args[i];
-            if (arg == "-e")
-                extractOnly = true;
-            else if (arg == "-t")
-                textFormat = true;
-            else if (arg == "-b")
-                batchMode = true;
-            else
-                processedArgs.Add(arg);
-        }
-
-        if (batchMode)
-        {
-            if (processedArgs.Count != 1)
-            {
-                Console.WriteLine("Error: Batch mode (-b) requires exactly one argument: <input_dir>");
-                ShowHelp();
-                return;
-            }
-        }
-        else
-        {
-            if (processedArgs.Count != 2)
-            {
-                Console.WriteLine("Error: Expected <input_file> and <output_dir>");
-                ShowHelp();
-                return;
-            }
-        }
-
-        var inputPath = processedArgs[0];
-        var outputPath = batchMode ? inputPath : processedArgs[1];
+        var inputPath = parser.GetValue<string>("-i");
+        var outputPath = parser.GetValue<string>("-o");
+        var extractOnly = parser.GetValue<bool>("-e");
+        var textFormat = parser.GetValue<OutputFormat>("-f") == OutputFormat.GLTF;
+        var batchMode = parser.GetValue<bool>("-b");
 
         var chrFile = new ChrFile();
         chrFile.convert = !extractOnly;
         chrFile.extract = extractOnly;
         chrFile.textFormat = textFormat;
+
+        if (string.IsNullOrEmpty(inputPath))
+        {
+            Console.WriteLine("Input path is required! Use -h to see help screen.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(outputPath))
+        {
+            var dirName = Path.GetFileNameWithoutExtension(inputPath);
+            outputPath = Path.Combine(Path.GetDirectoryName(inputPath), dirName);
+        }
 
         if (batchMode)
         {
@@ -75,41 +61,20 @@ public class Program
                     Console.WriteLine(e);
                     throw;
                 }
-
-                chrFile.Clean();
             }
 
-            Log.Line(files.Length == 0 ? "No .chr files found in the input directory." : "Done!", LogLevel.Info);
+            Console.WriteLine(files.Length == 0 ? "No .chr files found in the input directory." : "Done!");
         }
         else
         {
             if (!File.Exists(inputPath))
             {
-                Log.Line($"Input file not found: {inputPath}", LogLevel.Error);
+                Console.WriteLine($"Input file not found: {inputPath}");
                 return;
             }
 
             chrFile.Process(inputPath, outputPath);
-            Log.Line("Done!", LogLevel.Info);
+            Console.WriteLine("Done!");
         }
-    }
-
-    private static void ShowHelp()
-    {
-        Console.WriteLine("Converts .CHR files from Dragon Quest VIII (Playstation 2) to .glb/.glTF format.");
-        Console.WriteLine();
-        Console.WriteLine("Usage:");
-        Console.WriteLine("    dq8chr2glb.exe <input_file> <output_dir> [options]");
-        Console.WriteLine("    dq8chr2glb.exe <input_dir> -b (batch mode: output files are saved in the <input_dir>)");
-        Console.WriteLine("Examples:");
-        Console.WriteLine("    dq8chr2glb.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\\ap002.chr\" \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -e");
-        Console.WriteLine("    dq8chr2glb.exe \"C:\\Users\\Boris\\Desktop\\ChrFormatTest\" -b");
-        Console.WriteLine();
-        Console.WriteLine("Options:");
-        Console.WriteLine("   -e - Extract only - unpack .chr without conversion");
-        Console.WriteLine("   -t - Output as .glTF (text) instead of .glb (binary)");
-        Console.WriteLine("   -b - Batch mode - process all .chr files in the input directory");
-        Console.WriteLine();
-        var line = Console.ReadLine();
     }
 }
