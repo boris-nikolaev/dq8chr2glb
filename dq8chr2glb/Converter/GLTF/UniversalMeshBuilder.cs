@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using dq8chr2glb.Core.MDSFormat;
 using dq8chr2glb.Logger;
@@ -8,9 +7,8 @@ using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
-using Node = SharpGLTF.Schema2.Node;
 
-namespace dq8chr2glb.Converter
+namespace dq8chr2glb.Converter.GLTF
 {
     public static class UniversalMeshBuilder
     {
@@ -137,7 +135,7 @@ namespace dq8chr2glb.Converter
                 }
             }
 
-            ComputeNormals(positions, mdsMesh.triangles, normals);
+            MeshUtils.ComputeNormals(positions, mdsMesh.triangles, normals);
 
             foreach (var submesh in mdsMesh.submeshes)
             {
@@ -249,40 +247,6 @@ namespace dq8chr2glb.Converter
             }
 
             return new VertexBuilder<TvG, TvM, TvS>(geometry, material, skinning);
-        }
-
-        private static void ComputeNormals(List<Vector3> positions, int[] triangles, List<Vector3> normals)
-        {
-            for (var i = 0; i < normals.Count; i++)
-            {
-                normals[i] = Vector3.Zero;
-            }
-
-            for (var i = 0; i < triangles.Length; i += 3)
-            {
-                var idx1 = triangles[i];
-                var idx2 = triangles[i + 1];
-                var idx3 = triangles[i + 2];
-
-                var p1 = positions[idx1];
-                var p2 = positions[idx2];
-                var p3 = positions[idx3];
-
-                var edge1 = p2 - p1;
-                var edge2 = p3 - p1;
-
-                var normal = Vector3.Cross(edge1, edge2);
-                normal = Vector3.Normalize(normal);
-
-                normals[idx1] += normal;
-                normals[idx2] += normal;
-                normals[idx3] += normal;
-            }
-
-            for (var i = 0; i < normals.Count; i++)
-            {
-                normals[i] = Vector3.Normalize(normals[i]);
-            }
         }
     }
 }

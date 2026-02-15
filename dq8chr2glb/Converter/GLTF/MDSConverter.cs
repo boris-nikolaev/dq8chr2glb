@@ -14,7 +14,7 @@ using SixLabors.ImageSharp;
 using Node = SharpGLTF.Schema2.Node;
 using Texture = dq8chr2glb.TM2Format.Texture;
 
-namespace dq8chr2glb.Converter;
+namespace dq8chr2glb.Converter.GLTF;
 
 public class MDSConverter
 {
@@ -291,10 +291,7 @@ public class MDSConverter
                 var hasWeights = node.Mesh.Primitives.All(i => i.VertexAccessors.ContainsKey("WEIGHTS_0"));
                 if (hasWeights)
                 {
-                    if (Quaternion.Dot(node.LocalTransform.GetDecomposed().Rotation, Quaternion.Identity) >= 0.999f)
-                    {
-                        node.LocalTransform = Matrix4x4.Identity;
-                    }
+                    MeshUtils.ApplyTransform(node);
 
                     try
                     {
@@ -302,11 +299,19 @@ public class MDSConverter
                     }
                     catch (Exception e)
                     {
-                        Log.Line(e.TargetSite.Name);
+                        Context.current.errors.Add(new Error(name, "Can't set Skin", e));
                     }
                 }
             }
         }
+    }
+
+    private string DebugMatrix(Matrix4x4 mat)
+    {
+        return $"{mat.M11:F}, {mat.M12:F}, {mat.M13:F}, {mat.M14:F}\n" +
+               $"{mat.M21:F}, {mat.M22:F}, {mat.M23:F}, {mat.M24:F}\n" +
+               $"{mat.M31:F}, {mat.M32:F}, {mat.M33:F}, {mat.M34:F}\n" +
+               $"{mat.M41:F}, {mat.M42:F}, {mat.M43:F}, {mat.M44:F}\n";
     }
 
     private Matrix4x4 ToNumericsMatrix4x4(MDSMatrix m)
