@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using dq8chr2glb.Container;
 using dq8chr2glb.Converter;
+using dq8chr2glb.Converter.GLTF;
 using dq8chr2glb.Core.InfoCfg;
 using dq8chr2glb.Core.MDSFormat;
 using dq8chr2glb.Core.MOTFormat;
@@ -15,60 +16,71 @@ namespace dq8chr2glb;
 
 public class ChrFile
 {
-    public ModelConfig infoCfg;
-    public List<TM2Format.Texture> textures = new();
-    public List<MDSConverter> mdsConverters = new();
-
     public bool extract;
     public bool convert;
     public bool textFormat;
 
-    public void Process(string inputPath, string outputPath, bool isBatch = false)
+    public void Process(string inputPath, string outputPath)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        var chrData = File.ReadAllBytes(inputPath);
+
+        var ctx = new Context();
+        ctx.inputPath = inputPath;
+        ctx.modelName = Path.GetFileNameWithoutExtension(ctx.inputPath);
+        ctx.outputPath = Path.Combine(outputPath, ctx.modelName);
+
+        var chrData = File.ReadAllBytes(ctx.inputPath);
         var container = ChrContainer.FromBytes(chrData);
 
-        var outputName = Path.GetFileNameWithoutExtension(inputPath);
-        var outputDir = Path.Combine(outputPath, outputName);
-        EnsurePath(outputDir);
+        EnsurePath(ctx.outputPath);
 
         foreach (var file in container)
         {
-            if (!isBatch)
-            {
-                PrintTask(file);
-            }
+            PrintTask(file);
 
             switch (file.extension)
             {
                 case FileExtension.CFG:
-                    ProcessConfig(file, outputDir);
+                    ProcessConfig(file);
                     break;
                 case FileExtension.TEXT:
-                    ProcessTextFile(file, outputDir);
+                    ProcessTextFile(file);
                     break;
                 case FileExtension.TM2:
-                    ProcessTextures(file, outputDir);
+                    ProcessTextures(file);
                     break;
                 case FileExtension.MDS:
-                    ProcessMDSFile(file, outputDir);
+                    ProcessMDSFile(file);
                     break;
                 case FileExtension.MOT:
-                    ProcessMOTFile(file, outputDir);
+                    ProcessMOTFile(file);
                     break;
                 default:
-                    ProcessRawFile(file, outputDir);
+                    ProcessRawFile(file);
                     break;
             }
         }
 
         if (convert)
         {
-            foreach (var converter in mdsConverters)
+            foreach (var converter in Context.current.mdsConverters)
             {
-                converter.Save(outputDir, textFormat);
+                converter.Save(ctx.outputPath, textFormat);
             }
+        }
+
+        foreach (var err in Context.current.errors)
+        {
+            Log.Line($"{err.name}, {err.text}", LogLevel.Error);
+            if (err.exception != null)
+            {
+                Log.Error(err.exception);
+            }
+        }
+        
+        foreach (var err in Context.current.messages)
+        {
+            Log.Line($"{err.name}, {err.text}");
         }
     }
 
@@ -84,13 +96,6 @@ public class ChrFile
         Log.Line($"  Process: {file.name + spacer} {file.data.Length} bytes");
     }
 
-    public void Clean()
-    {
-        infoCfg = null;
-        textures = new();
-        mdsConverters = new();
-    }
-
     private void EnsurePath(string path)
     {
         if (!Directory.Exists(path))
@@ -99,34 +104,35 @@ public class ChrFile
         }
     }
 
-    private void ProcessMOTFile(IncludedFile file, string outputDir)
+    private void ProcessMOTFile(IncludedFile file)
     {
         if (extract)
         {
-            ProcessRawFile(file, outputDir);
+            ProcessRawFile(file);
         }
 
         if (convert)
         {
-            foreach (var converter in mdsConverters)
+            foreach (var converter in Context.current.mdsConverters)
             {
                 var motImporter = new Importer();
                 var animation = motImporter.Import(file.data);
-                converter.CreateAnimation(animation, infoCfg);
+                converter.CreateAnimation(animation, Context.current.infoCfg);
             }
         }
     }
 
-    private void ProcessMDSFile(IncludedFile file, string outputDir)
+    private void ProcessMDSFile(IncludedFile file)
     {
         if (extract)
         {
-            ProcessRawFile(file, outputDir);
+            ProcessRawFile(file);
         }
 
         var mdsScene = Reader.Read(file.data, file.name);
         if (mdsScene == null)
         {
+            Context.current.errors.Add(new Error(file.name, "mdsScene is empty!"));
             return;
         }
 
@@ -134,73 +140,94 @@ public class ChrFile
         {
             var converter = new MDSConverter(file.name);
             var rootName = Path.GetFileNameWithoutExtension(file.name);
-            converter.Convert(mdsScene, textures, rootName);
-            mdsConverters.Add(converter);
+            converter.Convert(mdsScene, Context.current.textures, rootName);
+            Context.current.mdsConverters.Add(converter);
         }
     }
 
-    private void ProcessConfig(IncludedFile file, string outputDir)
+    private void ProcessConfig(IncludedFile file)
     {
         if (extract)
         {
-            var isSecond = infoCfg != null;
+            var isSecond = Context.current.infoCfg != null;
             if (isSecond)
             {
                 file.name = file.name.Replace(".cfg", "_2.cfg");
             }
 
-            ProcessTextFile(file, outputDir);
+            ProcessTextFile(file);
         }
-        
+
         var data = Encoding.GetEncoding("shift_jis").GetString(file.data).TrimEnd('\0');
         var configFile = new ConfigFile(data);
-        
+
         var info = configFile.ReadConfig();
-        if (infoCfg == null)
+        if (Context.current.infoCfg == null)
         {
-            infoCfg = info;
+            Context.current.infoCfg = info;
         }
     }
 
-    private void ProcessTextFile(IncludedFile file, string outputDir)
+    private void ProcessTextFile(IncludedFile file)
     {
-        var root = Path.GetDirectoryName(file.name);
-        var fileName = Path.GetFileName(file.name);
-        var outputPath = Path.Combine(outputDir, root);
-        var text = Encoding.GetEncoding("shift_jis").GetString(file.data).TrimEnd('\0');
-        if (extract)
+        try
         {
-            EnsurePath(outputPath);
-            File.WriteAllText(Path.Combine(outputPath, fileName), text);
+            var root = Path.GetDirectoryName(file.name);
+            var fileName = Path.GetFileName(file.name);
+            var outputPath = Path.Combine(Context.current.outputPath, root);
+            var text = Encoding.GetEncoding("shift_jis").GetString(file.data).TrimEnd('\0');
+
+            if (string.IsNullOrEmpty(text))
+            {
+                Context.current.errors.Add(new Error(file.name, "Text data is empty!"));
+                return;
+            }
+
+            if (extract)
+            {
+                EnsurePath(outputPath);
+                File.WriteAllText(Path.Combine(outputPath, fileName), text);
+            }
+        }
+        catch (Exception e)
+        {
+            Context.current.errors.Add(new Error(file.name, "Error then process text file", e));
         }
     }
 
-    private void ProcessRawFile(IncludedFile file, string outputDir)
+    private void ProcessRawFile(IncludedFile file)
     {
-        var root = Path.GetDirectoryName(file.name);
-        var fileName = Path.GetFileName(file.name);
-        var outputPath = Path.Combine(outputDir, root);
-
-        if (extract)
+        try
         {
-            EnsurePath(outputPath);
-            File.WriteAllBytes(Path.Combine(outputPath, fileName), file.data);
+            var root = Path.GetDirectoryName(file.name);
+            var fileName = Path.GetFileName(file.name);
+            var outputPath = Path.Combine(Context.current.outputPath, root);
+
+            if (extract)
+            {
+                EnsurePath(outputPath);
+                File.WriteAllBytes(Path.Combine(outputPath, fileName), file.data);
+            }
+        }
+        catch (Exception e)
+        {
+            Context.current.errors.Add(new Error(file.name, $"File extraction failed", e));
         }
     }
 
-    private void ProcessTextures(IncludedFile file, string outputDir)
+    private void ProcessTextures(IncludedFile file)
     {
         var root = Path.GetDirectoryName(file.name);
         var fileName = Path.GetFileNameWithoutExtension(file.name);
-        var outputPath = Path.Combine(outputDir, root);
+        var outputPath = Path.Combine(Context.current.outputPath, root);
 
-        var image = TM2Format.TM2Format.GetImage(file.data, fileName);
+        var image = TM2Format.TM2Format.GetImage(file, fileName);
         if (extract)
         {
             EnsurePath(outputPath);
             image.data.SaveAsPng(Path.Combine(outputPath, fileName + ".png"));
         }
 
-        textures.Add(image);
+        Context.current.textures.Add(image);
     }
 }

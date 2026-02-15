@@ -2,6 +2,16 @@ using System;
 
 namespace dq8chr2glb.Logger;
 
+public enum LogMode
+{
+    ALL     = 8, // show all debug info
+    DEBUG   = 4, // show task name, .chr content and status with stacktrace
+    EXTEND  = 2, // show task name, .chr content and status with general errors
+    MINIMAL = 1, // show task name and result status
+    NONE    = 0, // squeaky clean console
+}
+
+[Flags]
 public enum LogLevel
 {
     Debug,
@@ -14,8 +24,8 @@ public enum LogLevel
 public static class Log
 {
     // public const LogLevel LogLevel = Logger.LogLevel.Info;
-    
-    public static void Line(object data, LogLevel level = LogLevel.Debug)
+
+    public static void Line(object? data, LogLevel level = LogLevel.Debug)
     {
         var lastColor = Console.ForegroundColor;
         var color = level switch
@@ -27,13 +37,13 @@ public static class Log
             LogLevel.None    => ConsoleColor.White,
         };
 
-        if (level == LogLevel.Debug)
-        {
-            return;
-        }
+        // if (level == LogLevel.Debug)
+        // {
+        //     return;
+        // }
 
         Console.ForegroundColor = color;
-        Console.WriteLine(data.ToString());
+        Console.WriteLine(data != null ? data.ToString() : "");
         Console.ForegroundColor = lastColor;
     }
 
@@ -43,7 +53,7 @@ public static class Log
         Console.ForegroundColor = ConsoleColor.Red;
         Console.Write($"[{level}] ");
         Console.ForegroundColor = ConsoleColor.DarkRed;
-        // Console.Write($"{e.Message}\n From:\n{e.Source}\nStacktrace:\n{e.StackTrace}\n");
+        Console.Write($"{e.Message}\n From:\n{e.Source}\nStacktrace:\n{e.StackTrace}\n");
         Console.Write($"{e.Message}\n");
         Console.ForegroundColor = lastColor;
     }
