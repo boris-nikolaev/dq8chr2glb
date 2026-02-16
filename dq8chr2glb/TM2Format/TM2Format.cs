@@ -73,7 +73,7 @@ public static class TM2Format
         }
         catch (Exception e)
         {
-            Context.current.errors.Add(new Error(currentFile.name, "Error then import texture", e));
+            Context.current.errors.Add(new Error(currentFile.name, "Error while import texture", e));
             palette = null;
         }
 

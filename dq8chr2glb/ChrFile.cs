@@ -191,7 +191,7 @@ public class ChrFile
         }
         catch (Exception e)
         {
-            Context.current.errors.Add(new Error(file.name, "Error then process text file", e));
+            Context.current.errors.Add(new Error(file.name, "Error while process text file", e));
         }
     }
 
